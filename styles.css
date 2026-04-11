@@ -1,0 +1,223 @@
+/* ── Favorites Panel ─────────────────────────────────────────────────────────── */
+
+.favorites-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* ── List ────────────────────────────────────────────────────────────────────── */
+
+.favorites-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* ── Items ───────────────────────────────────────────────────────────────────── */
+
+.favorites-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 12px;
+  border-radius: var(--radius-s);
+  cursor: grab;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.favorites-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.favorites-item:hover .favorites-remove-btn {
+  opacity: 1;
+}
+
+/* ── File icon ───────────────────────────────────────────────────────────────── */
+
+.favorites-item-icon {
+  flex: 0 0 var(--icon-size);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── File name ───────────────────────────────────────────────────────────────── */
+
+.favorites-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--nav-item-size);
+  color: var(--nav-item-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--line-height-tight);
+  cursor: pointer;
+}
+
+.favorites-item:hover .favorites-item-name {
+  color: var(--nav-item-color-hover);
+}
+
+/* ── Remove button ───────────────────────────────────────────────────────────── */
+
+.favorites-remove-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.1s;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.favorites-remove-btn:hover {
+  color: var(--text-accent);
+}
+
+/* ── Groups ──────────────────────────────────────────────────────────────────── */
+
+.favorites-group {
+  margin-bottom: 2px;
+}
+
+.favorites-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  cursor: grab;
+  border-radius: var(--radius-s);
+  user-select: none;
+  position: relative;
+}
+
+.favorites-group-header:hover {
+  background: var(--background-modifier-hover);
+}
+
+.favorites-group-arrow {
+  flex-shrink: 0;
+  color: var(--nav-collapse-icon-color);
+  transition: transform 0.1s ease;
+}
+
+.favorites-group-arrow.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.favorites-group-folder-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.favorites-group-name {
+  flex: 1;
+  font-size: var(--nav-item-size);
+  font-weight: var(--nav-item-weight);
+  color: var(--nav-item-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.favorites-group-header:hover .favorites-group-name {
+  color: var(--nav-item-color-hover);
+}
+
+.favorites-group-items {
+  padding-left: 12px;
+}
+
+.favorites-group-empty {
+  padding: 4px 8px 4px 28px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-style: italic;
+  border-radius: var(--radius-s);
+}
+
+/* ── Drag and drop indicators ────────────────────────────────────────────────── */
+
+/* Item/group being dragged */
+.fav-dragging {
+  opacity: 0.4;
+}
+
+/* Insertion line — top */
+.fav-drop-top {
+  box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+/* Insertion line — bottom */
+.fav-drop-bottom {
+  box-shadow: 0 2px 0 0 var(--interactive-accent);
+}
+
+/* Drop INTO a group (highlight the header or empty body) */
+.fav-drop-into {
+  background: var(--background-modifier-hover) !important;
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-s);
+}
+
+/* Drop onto the list background (end of ungrouped) */
+.fav-drop-list {
+  background: var(--background-modifier-hover);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+
+.favorites-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 8px;
+  text-align: center;
+}
+
+.favorites-empty-icon {
+  font-size: 32px;
+  opacity: 0.25;
+  line-height: 1;
+}
+
+.favorites-empty-text {
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.favorites-empty-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  max-width: 200px;
+  line-height: 1.5;
+}
+
+/* ── Modal inputs ────────────────────────────────────────────────────────────── */
+
+.favorites-modal-input {
+  width: 100%;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.favorites-modal-btn {
+  width: 100%;
+  display: block;
+}

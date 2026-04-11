@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-favorites",
+  "name": "Favorites",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Pin any file to a favorites panel, accessible from the sidebar. Supports all file types and frontmatter sync for markdown files.",
+  "author": "John",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
