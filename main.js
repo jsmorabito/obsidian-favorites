@@ -1,5 +1,5 @@
 /*
- * Obsidian Favorites Plugin v1.2.0
+ * Obsidian Favorites Plugin v1.3.0
  */
 
 "use strict";
@@ -8,6 +8,16 @@ var obsidian = require("obsidian");
 
 const VIEW_TYPE_FAVORITES = "favorites-view";
 const DEFAULT_DATA = { favorites: [], groups: [] };
+const DEFAULT_SETTINGS = { hideExtension: false, frontmatterKey: "" };
+
+// Custom icon: star with a plus in the middle — used for the "Add active file
+// to favorites" nav action. Uses currentColor so it inherits theme color
+// (hover, active, accent) identically to built-in Lucide icons.
+//
+// Obsidian's addIcon() wraps this content in an SVG with viewBox="0 0 100 100",
+// so the source paths (drawn for a 24x24 viewBox) are scaled up by 100/24.
+const FAVORITES_ADD_ICON_ID = "favorites-add";
+const FAVORITES_ADD_ICON_SVG = `<g transform="scale(4.166667)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295C11.5688 2.20646 11.6365 2.13193 11.7205 2.07983C11.8044 2.02772 11.9012 2.00011 12 2.00011C12.0988 2.00011 12.1956 2.02772 12.2795 2.07983C12.3635 2.13193 12.4312 2.20646 12.475 2.295L14.785 6.974C14.9372 7.28197 15.1618 7.54841 15.4396 7.75045C15.7174 7.9525 16.0401 8.08411 16.38 8.134L21.546 8.89C21.6439 8.90418 21.7358 8.94547 21.8115 9.0092C21.8871 9.07293 21.9434 9.15655 21.974 9.25061C22.0046 9.34466 22.0083 9.44541 21.9846 9.54144C21.9609 9.63747 21.9108 9.72495 21.84 9.794L18.104 13.432C17.8576 13.6721 17.6733 13.9685 17.5668 14.2956C17.4604 14.6228 17.4351 14.9709 17.493 15.31L18.375 20.45C18.3923 20.5478 18.3817 20.6486 18.3445 20.7407C18.3073 20.8328 18.2449 20.9126 18.1645 20.971C18.0842 21.0294 17.989 21.064 17.8899 21.0709C17.7908 21.0778 17.6917 21.0567 17.604 21.01L12.986 18.582C12.6817 18.4222 12.3432 18.3388 11.9995 18.3388C11.6558 18.3388 11.3173 18.4222 11.013 18.582L6.396 21.01C6.30833 21.0564 6.2094 21.0773 6.11045 21.0703C6.0115 21.0632 5.91652 21.0286 5.83629 20.9702C5.75607 20.9119 5.69383 20.8322 5.65666 20.7402C5.61948 20.6483 5.60886 20.5477 5.626 20.45L6.507 15.311C6.5652 14.9717 6.53998 14.6234 6.43354 14.296C6.32709 13.9687 6.14261 13.6722 5.896 13.432L2.16 9.795C2.08859 9.72603 2.03799 9.6384 2.01396 9.54207C1.98993 9.44575 1.99344 9.34462 2.02408 9.25019C2.05472 9.15576 2.11127 9.07184 2.18728 9.00798C2.26329 8.94412 2.3557 8.9029 2.454 8.889L7.619 8.134C7.95926 8.0845 8.28239 7.95306 8.56058 7.75099C8.83878 7.54892 9.0637 7.28227 9.216 6.974L11.525 2.295Z"/><path d="M12 9V15"/><path d="M15 12H9"/></g>`;
 
 // Module-level drag state — persists across view refreshes
 let _dragState = null; // { type: "item"|"group", path?: string, fromGroupId?: string|null, id?: string }
@@ -70,6 +80,7 @@ class FavoritesPlugin extends obsidian.Plugin {
 
   async onload() {
     await this.loadPluginData();
+    obsidian.addIcon(FAVORITES_ADD_ICON_ID, FAVORITES_ADD_ICON_SVG);
     this.registerView(VIEW_TYPE_FAVORITES, (leaf) => new FavoritesView(leaf, this));
     this.addRibbonIcon("star", "Open Favorites", () => this.activateView());
 
@@ -85,6 +96,7 @@ class FavoritesPlugin extends obsidian.Plugin {
       await this.addFavorite(file);
     }});
     this.addCommand({ id: "open-favorites", name: "Open favorites panel", callback: () => this.activateView() });
+    this.addSettingTab(new FavoritesSettingTab(this.app, this));
     this.addCommand({ id: "remove-favorite", name: "Remove active file from favorites", callback: async () => {
       const file = this.app.workspace.getActiveFile();
       if (!file) { new obsidian.Notice("No active file."); return; }
@@ -95,7 +107,64 @@ class FavoritesPlugin extends obsidian.Plugin {
     this.registerEvent(this.app.vault.on("rename", (f, op) => this.handleRename(f, op)));
     this.registerEvent(this.app.vault.on("delete", f => this.handleDelete(f)));
     this.registerEvent(this.app.metadataCache.on("changed", f => this.handleMetadataChange(f)));
-    this.app.workspace.onLayoutReady(() => this.activateView());
+
+    // ── View-actions star button ───────────────────────────────────────────
+    this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
+      if (leaf) this._injectStarButton(leaf);
+    }));
+    this.registerEvent(this.app.workspace.on("layout-change", () => {
+      this._injectAllStarButtons();
+    }));
+    this.registerEvent(this.app.workspace.on("file-open", () => {
+      this._refreshAllStarBtns();
+    }));
+
+    this.app.workspace.onLayoutReady(() => {
+      this._injectAllStarButtons();
+    });
+  }
+
+  // ── View-actions star button ───────────────────────────────────────────────
+
+  _injectAllStarButtons() {
+    this.app.workspace.iterateAllLeaves(leaf => this._injectStarButton(leaf));
+  }
+
+  _injectStarButton(leaf) {
+    const view = leaf?.view;
+    if (!view?.file || typeof view.addAction !== "function") return;
+    if (view.getViewType() === VIEW_TYPE_FAVORITES) return;
+
+    // Re-use existing button if already injected for this view
+    const actionsEl = view.containerEl?.parentElement?.querySelector(".view-actions");
+    if (!actionsEl) return;
+    const existing = actionsEl.querySelector(".favorites-star-btn");
+    if (existing) { this._refreshStarBtn(existing, view.file); return; }
+
+    const btn = view.addAction("star", "Toggle favorite", async () => {
+      const f = leaf.view?.file;
+      if (f) await this.toggleFavorite(f);
+    });
+    btn.addClass("favorites-star-btn");
+    this._refreshStarBtn(btn, view.file);
+  }
+
+  _refreshStarBtn(btn, file) {
+    const isFav = this.isFavorite(file);
+    btn.toggleClass("mod-bookmarked", isFav);
+    obsidian.setIcon(btn, "star");
+    btn.setAttribute("aria-label", isFav ? "Remove from favorites" : "Add to favorites");
+  }
+
+  _refreshAllStarBtns() {
+    this.app.workspace.iterateAllLeaves(leaf => {
+      const view = leaf?.view;
+      if (!view?.file) return;
+      const actionsEl = view.containerEl?.parentElement?.querySelector(".view-actions");
+      if (!actionsEl) return;
+      const btn = actionsEl.querySelector(".favorites-star-btn");
+      if (btn) this._refreshStarBtn(btn, view.file);
+    });
   }
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -104,10 +173,17 @@ class FavoritesPlugin extends obsidian.Plugin {
     const saved = await this.loadData();
     this.data = Object.assign({ favorites: [], groups: [] }, saved);
     if (!Array.isArray(this.data.groups)) this.data.groups = [];
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved?.settings ?? {});
   }
 
   async savePluginData() {
-    await this.saveData(this.data);
+    await this.saveData(Object.assign({}, this.data, { settings: this.settings }));
+    this.refreshView();
+    this._refreshAllStarBtns();
+  }
+
+  async saveSettings() {
+    await this.saveData(Object.assign({}, this.data, { settings: this.settings }));
     this.refreshView();
   }
 
@@ -331,19 +407,28 @@ class FavoritesView extends obsidian.ItemView {
   getDisplayText() { return "Favorites"; }
   getIcon()        { return "star"; }
 
-  async onOpen()  { this.refresh(); }
+  async onOpen() {
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("file-open", () => this.refresh()));
+    this._buildNav();
+    this.refresh();
+  }
   async onClose() {}
 
-  refresh() {
-    const root = this.containerEl.children[1];
-    root.empty();
-    root.addClass("favorites-root");
+  // Build the nav-header once at the workspace-leaf-content level, matching
+  // core plugins (bookmarks, etc.) which place nav-header as a direct child
+  // of workspace-leaf-content — not inside view-content.
+  _buildNav() {
+    if (this.containerEl.querySelector(".favorites-nav-header")) return;
 
-    // ── Nav buttons ──────────────────────────────────────────────────────
-    const nav = root.createEl("div", { cls: "nav-buttons-container" });
+    const navHeader = this.containerEl.createEl("div", { cls: "nav-header favorites-nav-header" });
+    this.containerEl.prepend(navHeader); // before view-header, matching core structure
 
-    const addBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button", title: "Add active file to favorites" });
-    obsidian.setIcon(addBtn, "bookmark-plus");
+    const nav = navHeader.createEl("div", { cls: "nav-buttons-container" });
+
+    const addBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button" });
+    obsidian.setTooltip(addBtn, "Add active file to favorites");
+    obsidian.setIcon(addBtn, FAVORITES_ADD_ICON_ID);
     addBtn.addEventListener("click", async () => {
       const file = this.app.workspace.getActiveFile();
       if (!file) { new obsidian.Notice("No active file."); return; }
@@ -351,18 +436,32 @@ class FavoritesView extends obsidian.ItemView {
       await this.plugin.addFavorite(file);
     });
 
-    const groupBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button", title: "Create new group" });
+    const groupBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button" });
+    obsidian.setTooltip(groupBtn, "New group");
     obsidian.setIcon(groupBtn, "folder-plus");
     groupBtn.addEventListener("click", () => {
       new NewGroupModal(this.app, async name => await this.plugin.createGroup(name)).open();
     });
 
-    const collapseBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button", title: "Collapse/expand all groups" });
-    obsidian.setIcon(collapseBtn, "chevrons-up-down");
+    const collapseBtn = nav.createEl("div", { cls: "clickable-icon nav-action-button" });
+    const updateCollapseBtn = () => {
+      const anyExpanded = this.plugin.data.groups.some(g => !g.collapsed);
+      obsidian.setIcon(collapseBtn, anyExpanded ? "chevrons-down-up" : "chevrons-up-down");
+      obsidian.setTooltip(collapseBtn, anyExpanded ? "Collapse all" : "Expand all");
+    };
+    updateCollapseBtn();
     collapseBtn.addEventListener("click", async () => {
       const anyExpanded = this.plugin.data.groups.some(g => !g.collapsed);
       await this.plugin.setAllGroupsCollapsed(anyExpanded);
+      updateCollapseBtn();
     });
+  }
+
+  refresh() {
+    const root = this.containerEl.querySelector(".view-content");
+    if (!root) return;
+    root.empty();
+    root.addClass("favorites-root");
 
     // ── List ─────────────────────────────────────────────────────────────
     const list = root.createEl("div", { cls: "favorites-list" });
@@ -414,6 +513,29 @@ class FavoritesView extends obsidian.ItemView {
       list.classList.remove("fav-drop-list");
       await this.plugin.moveItemToUngroupedEnd(_dragState.path);
     });
+  }
+
+  // ── Display name resolution ───────────────────────────────────────────────
+  //
+  // Priority: frontmatter key value → file.basename (hideExtension) → file.name
+  getDisplayName(file) {
+    const { frontmatterKey, hideExtension } = this.plugin.settings;
+
+    // Frontmatter override (markdown files only)
+    if (frontmatterKey && file instanceof obsidian.TFile && file.extension === "md") {
+      const cache = this.app.metadataCache.getFileCache(file);
+      const val = cache?.frontmatter?.[frontmatterKey];
+      if (val !== undefined && val !== null && String(val).trim() !== "") {
+        return String(val).trim();
+      }
+    }
+
+    // Extension toggle
+    if (hideExtension && file instanceof obsidian.TFile) {
+      return file.basename;
+    }
+
+    return file.name;
   }
 
   // ── Iconic integration ────────────────────────────────────────────────────
@@ -504,9 +626,10 @@ class FavoritesView extends obsidian.ItemView {
     // Group name
     headerEl.createEl("span", { cls: "tree-item-inner favorites-group-name", text: group.name });
 
-    // Toggle collapse (prevent triggering on drag)
-    headerEl.addEventListener("click", async e => {
-      if (e.defaultPrevented) return;
+    // Toggle collapse — use mouseup for the same reason as item open:
+    // draggable="true" on this element causes Chromium to delay/suppress click.
+    headerEl.addEventListener("mouseup", async e => {
+      if (e.button !== 0 || _dragState) return;
       await this.plugin.toggleGroupCollapsed(group.id);
     });
 
@@ -554,56 +677,68 @@ class FavoritesView extends obsidian.ItemView {
   // ── Item ──────────────────────────────────────────────────────────────────
 
   renderItem(container, file, filePath, groupId) {
-    const item = container.createEl("div", { cls: "favorites-item" });
-    item.setAttribute("draggable", "true");
-    item.dataset.path = filePath;
+    const activeFile = this.app.workspace.getActiveFile();
+    const isActive = activeFile?.path === filePath;
 
-    // ── Drag events ───────────────────────────────────────────────────────
+    // Outer tree-item — matches the structure bookmarks/file-explorer use.
+    // Drag state lives here so drop indicators apply to the whole row unit.
+    const treeItem = container.createEl("div", { cls: "tree-item" });
+    treeItem.setAttribute("draggable", "true");
+    treeItem.dataset.path = filePath;
 
-    item.addEventListener("dragstart", e => {
+    // The visible interactive row. favorites-item is the minimal hook for our
+    // unique additions (grab cursor, remove-btn visibility). Core tree-item-self
+    // handles padding, hover, active, border-radius.
+    const item = treeItem.createEl("div", {
+      cls: "tree-item-self is-clickable favorites-item" + (isActive ? " is-active" : "")
+    });
+
+    // ── Drag events (on the outer tree-item) ──────────────────────────────
+
+    treeItem.addEventListener("dragstart", e => {
       _dragState = { type: "item", path: filePath, fromGroupId: groupId };
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", filePath);
-      setTimeout(() => item.classList.add("fav-dragging"), 0);
+      setTimeout(() => treeItem.classList.add("fav-dragging"), 0);
     });
 
-    item.addEventListener("dragend", () => {
-      item.classList.remove("fav-dragging");
+    treeItem.addEventListener("dragend", () => {
+      treeItem.classList.remove("fav-dragging");
       _dragState = null;
       clearDropIndicators();
     });
 
-    item.addEventListener("dragover", e => {
+    treeItem.addEventListener("dragover", e => {
       if (!_dragState || _dragState.type !== "item" || _dragState.path === filePath) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       clearDropIndicators();
-      const mid = item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2;
-      item.classList.add(e.clientY < mid ? "fav-drop-top" : "fav-drop-bottom");
+      const mid = treeItem.getBoundingClientRect().top + treeItem.getBoundingClientRect().height / 2;
+      treeItem.classList.add(e.clientY < mid ? "fav-drop-top" : "fav-drop-bottom");
     });
 
-    item.addEventListener("dragleave", e => {
-      if (!item.contains(e.relatedTarget)) {
-        item.classList.remove("fav-drop-top", "fav-drop-bottom");
+    treeItem.addEventListener("dragleave", e => {
+      if (!treeItem.contains(e.relatedTarget)) {
+        treeItem.classList.remove("fav-drop-top", "fav-drop-bottom");
       }
     });
 
-    item.addEventListener("drop", async e => {
+    treeItem.addEventListener("drop", async e => {
       e.preventDefault();
       clearDropIndicators();
       if (!_dragState || _dragState.type !== "item" || _dragState.path === filePath) return;
-      const mid = item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2;
+      const mid = treeItem.getBoundingClientRect().top + treeItem.getBoundingClientRect().height / 2;
       const position = e.clientY < mid ? "before" : "after";
       await this.plugin.moveItemRelativeToItem(_dragState.path, _dragState.fromGroupId, filePath, groupId, position);
     });
 
     // ── Content ───────────────────────────────────────────────────────────
 
-    // File icon — prefer Iconic plugin, fall back to file-type defaults
-    const iconEl = item.createEl("div", { cls: "tree-item-icon favorites-item-icon" });
+    // tree-item-icon: core CSS positions this absolutely within tree-item-self,
+    // identical to how bookmarks/file-explorer render icons.
+    const iconEl = item.createEl("div", { cls: "tree-item-icon" });
     const iconicEntry = file instanceof obsidian.TFile ? this.getIconicEntry(file) : null;
     if (iconicEntry?.icon) {
-      // Iconic icons are either Lucide names (kebab-case) or raw emoji/unicode
       if (/^[a-z0-9-]+$/.test(iconicEntry.icon)) {
         obsidian.setIcon(iconEl, iconicEntry.icon);
       } else {
@@ -623,18 +758,18 @@ class FavoritesView extends obsidian.ItemView {
       obsidian.setIcon(iconEl, iconName);
     }
 
-    const name = item.createEl("span", { cls: "favorites-item-name", text: file.name });
-    name.setAttribute("title", filePath);
-    name.addEventListener("click", async e => {
-      e.stopPropagation();
-      if (file instanceof obsidian.TFile) await this.app.workspace.getLeaf(false).openFile(file);
-    });
+    // tree-item-inner: core handles text truncation and left indent to clear
+    // the absolutely-positioned icon — same as bookmarks/file-explorer.
+    const inner = item.createEl("div", { cls: "tree-item-inner" });
+    inner.setText(this.getDisplayName(file));
 
-    const removeBtn = item.createEl("div", { cls: "favorites-remove-btn clickable-icon", title: "Remove from favorites" });
-    obsidian.setIcon(removeBtn, "x");
-    removeBtn.addEventListener("click", async e => {
-      e.stopPropagation();
-      await this.plugin.removeFavorite(file);
+    // Use mouseup instead of click — draggable="true" on the ancestor causes
+    // Chromium to delay/suppress click events for drag disambiguation.
+    // mouseup fires immediately on mouse release and is NOT dispatched during
+    // an active HTML5 drag operation, so it naturally ignores drags.
+    item.addEventListener("mouseup", async e => {
+      if (e.button !== 0 || _dragState) return; // left-button only, skip if drag active
+      if (file instanceof obsidian.TFile) await this.app.workspace.getLeaf(false).openFile(file);
     });
 
     // ── Context menu ──────────────────────────────────────────────────────
@@ -666,6 +801,43 @@ class FavoritesView extends obsidian.ItemView {
         .onClick(async () => await this.plugin.removeFavorite(file)));
       menu.showAtMouseEvent(e);
     });
+  }
+}
+
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
+
+class FavoritesSettingTab extends obsidian.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    new obsidian.Setting(containerEl)
+      .setName("Hide file extensions")
+      .setDesc("When enabled, file extensions (.md, .pdf, etc.) are hidden in the favorites list.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.hideExtension)
+        .onChange(async value => {
+          this.plugin.settings.hideExtension = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName("Display name frontmatter key")
+      .setDesc("Show a frontmatter value instead of the file name. Enter the key you use, e.g. \"title\". Leave blank to use the file name.")
+      .addText(text => text
+        .setPlaceholder("e.g. title")
+        .setValue(this.plugin.settings.frontmatterKey)
+        .onChange(async value => {
+          this.plugin.settings.frontmatterKey = value.trim();
+          await this.plugin.saveSettings();
+        })
+      );
   }
 }
 

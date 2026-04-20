@@ -1,13 +1,19 @@
 {
   "favorites": [
-    "Plugins.md"
+    "p.Objects plugin.md"
   ],
   "groups": [
     {
       "id": "mnt0ec9629b9cvf1ysi",
-      "name": "Folder",
+      "name": "Projects",
       "collapsed": false,
-      "items": []
+      "items": [
+        "Recently Viewed plugin.md"
+      ]
     }
-  ]
+  ],
+  "settings": {
+    "hideExtension": true,
+    "frontmatterKey": "title"
+  }
 }

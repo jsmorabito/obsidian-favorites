@@ -1,11 +1,16 @@
 /* ── Favorites Panel ─────────────────────────────────────────────────────────── */
 
+/* view-content normally gets 12px top padding from core; bookmarks overrides
+   it to 4px. Match that with a more specific selector to beat the core rule. */
+.workspace-leaf-content .favorites-root {
+  padding-top: var(--size-4-1);
+}
+
 .favorites-root {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  padding: 0;
 }
 
 /* ── List ────────────────────────────────────────────────────────────────────── */
@@ -13,104 +18,57 @@
 .favorites-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
 }
 
 /* ── Items ───────────────────────────────────────────────────────────────────── */
 
+/* tree-item-self provides everything (display, padding, hover, active, radius).
+   favorites-item is only a minimal hook for grab cursor. */
 .favorites-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 12px;
-  border-radius: var(--radius-s);
   cursor: grab;
-  min-width: 0;
-  overflow: hidden;
-  position: relative;
+  user-select: none;
 }
 
-.favorites-item:hover {
-  background: var(--background-modifier-hover);
-}
-
-.favorites-item:hover .favorites-remove-btn {
-  opacity: 1;
-}
-
-/* ── File icon ───────────────────────────────────────────────────────────────── */
-
-.favorites-item-icon {
-  flex: 0 0 var(--icon-size);
-  color: var(--text-muted);
+/* tree-item-icon is position:absolute, so it doesn't participate in the
+   parent's align-items:center. Pin it to the vertical mid-point explicitly. */
+.favorites-item .tree-item-icon {
+  --icon-size: var(--icon-s);
+  --icon-stroke: var(--icon-s-stroke-width);
   display: flex;
   align-items: center;
   justify-content: center;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-/* ── File name ───────────────────────────────────────────────────────────────── */
-
-.favorites-item-name {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--nav-item-size);
+/* tree-item-inner: core handles flex/truncation. We add nav color tokens so
+   hover and active states match every other Obsidian panel. */
+.favorites-item .tree-item-inner {
   color: var(--nav-item-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: var(--line-height-tight);
-  cursor: pointer;
+  font-size: var(--nav-item-size);
 }
 
-.favorites-item:hover .favorites-item-name {
+.favorites-item:hover .tree-item-inner {
   color: var(--nav-item-color-hover);
 }
 
-/* ── Remove button ───────────────────────────────────────────────────────────── */
-
-.favorites-remove-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--text-muted);
-  opacity: 0;
-  transition: opacity 0.15s, color 0.1s;
-  border-radius: var(--radius-s);
-  cursor: pointer;
-}
-
-.favorites-remove-btn:hover {
-  color: var(--text-accent);
+.favorites-item.is-active .tree-item-inner {
+  color: var(--nav-item-color-active);
+  font-weight: var(--nav-item-weight-active);
 }
 
 /* ── Groups ──────────────────────────────────────────────────────────────────── */
 
-.favorites-group {
-  margin-bottom: 2px;
-}
-
+/* tree-item-self on the header provides the base — only keep what's unique. */
 .favorites-group-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
   cursor: grab;
-  border-radius: var(--radius-s);
   user-select: none;
-  position: relative;
-}
-
-.favorites-group-header:hover {
-  background: var(--background-modifier-hover);
 }
 
 .favorites-group-arrow {
   flex-shrink: 0;
   color: var(--nav-collapse-icon-color);
-  transition: transform 0.1s ease;
+  transition: transform var(--anim-duration-fast) ease;
 }
 
 .favorites-group-arrow.is-collapsed {
@@ -119,7 +77,8 @@
 
 .favorites-group-folder-icon {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--icon-color);
+  opacity: var(--icon-opacity);
 }
 
 .favorites-group-name {
@@ -136,12 +95,9 @@
   color: var(--nav-item-color-hover);
 }
 
-.favorites-group-items {
-  padding-left: 12px;
-}
-
+/* tree-item-children already handles indent via core CSS */
 .favorites-group-empty {
-  padding: 4px 8px 4px 28px;
+  padding: var(--size-2-1) var(--size-4-2) var(--size-2-1) var(--size-4-6);
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   font-style: italic;
@@ -150,32 +106,27 @@
 
 /* ── Drag and drop indicators ────────────────────────────────────────────────── */
 
-/* Item/group being dragged */
 .fav-dragging {
   opacity: 0.4;
 }
 
-/* Insertion line — top */
 .fav-drop-top {
   box-shadow: 0 -2px 0 0 var(--interactive-accent);
 }
 
-/* Insertion line — bottom */
 .fav-drop-bottom {
   box-shadow: 0 2px 0 0 var(--interactive-accent);
 }
 
-/* Drop INTO a group (highlight the header or empty body) */
 .fav-drop-into {
-  background: var(--background-modifier-hover) !important;
+  background: var(--nav-item-background-hover) !important;
   outline: 2px solid var(--interactive-accent);
   outline-offset: -2px;
   border-radius: var(--radius-s);
 }
 
-/* Drop onto the list background (end of ungrouped) */
 .fav-drop-list {
-  background: var(--background-modifier-hover);
+  background: var(--nav-item-background-hover);
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────────── */
@@ -185,35 +136,46 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-  gap: 8px;
+  padding: var(--size-4-10) var(--size-4-5);
+  gap: var(--size-4-2);
   text-align: center;
 }
 
 .favorites-empty-icon {
-  font-size: 32px;
-  opacity: 0.25;
+  font-size: var(--font-ui-larger);
+  opacity: var(--icon-opacity);
   line-height: 1;
 }
 
 .favorites-empty-text {
   font-size: var(--font-ui-small);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
 }
 
 .favorites-empty-hint {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
-  max-width: 200px;
-  line-height: 1.5;
+  max-width: var(--size-4-50);
+  line-height: var(--line-height-normal);
+}
+
+/* ── View-actions star button ────────────────────────────────────────────────── */
+
+.favorites-star-btn svg {
+  fill: none;
+  transition: fill var(--anim-duration-fast) ease;
+}
+
+.favorites-star-btn.mod-bookmarked svg {
+  fill: var(--icon-color);
 }
 
 /* ── Modal inputs ────────────────────────────────────────────────────────────── */
 
 .favorites-modal-input {
   width: 100%;
-  margin-bottom: 12px;
+  margin-bottom: var(--size-4-3);
   display: block;
 }
 
